@@ -369,6 +369,20 @@
           <img class="os-icon" src="https://image-url-2-feature-1251524319.cos.ap-shanghai.myqcloud.com/openstoryline/web/static/dice.png" alt="" decoding="async" />
         </button>
 
+        <button
+          id="pipelineBtn"
+          class="ghost-icon-btn pipeline-btn"
+          type="button"
+          title="一键剪辑"
+          aria-label="一键剪辑"
+          data-i18n-title="composer.pipeline"
+          data-i18n-aria-label="composer.pipeline"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="os-icon pipeline-icon">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+          </svg>
+        </button>
+
         <button id="sendBtn" class="send-btn" aria-label="发送">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M12 19V6"></path>
@@ -385,6 +399,42 @@
       <div class="modal-body" role="dialog" aria-modal="true">
         <button class="modal-close" id="modalClose" aria-label="关闭">×</button>
         <div class="modal-content" id="modalContent"></div>
+      </div>
+    </div>
+
+    <!-- Pipeline 模板选择弹窗 -->
+    <div id="pipelineModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop" id="pipelineModalBackdrop"></div>
+      <div class="modal-body pipeline-modal-body" role="dialog" aria-modal="true">
+        <button class="modal-close" id="pipelineModalClose" aria-label="关闭">×</button>
+        <h3 class="pipeline-modal-title" data-i18n="pipeline.select_template">选择剪辑模板</h3>
+        <div id="pipelineTemplateList" class="pipeline-template-list">
+          <!-- JS 动态填充 -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Pipeline 进度面板 (chat 内嵌) -->
+    <!-- 由 JS 动态插入 chat 区域 -->
+
+    <!-- Pipeline 半自动确认弹窗 -->
+    <div id="pipelineConfirmModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop" id="pipelineConfirmBackdrop"></div>
+      <div class="modal-body pipeline-confirm-body" role="dialog" aria-modal="true">
+        <h3 class="pipeline-confirm-title" data-i18n="pipeline.confirm_title">确认节点参数</h3>
+        <div class="pipeline-confirm-node">
+          <span data-i18n="pipeline.confirm_node">当前节点：</span>
+          <strong id="pipelineConfirmNodeId"></strong>
+        </div>
+        <div id="pipelineConfirmParams" class="pipeline-confirm-params"></div>
+        <div class="pipeline-confirm-footer">
+          <div class="pipeline-countdown">
+            <span data-i18n="pipeline.auto_proceed">自动继续</span>
+            <span id="pipelineCountdown" class="pipeline-countdown-num">10</span>
+            <span>s</span>
+          </div>
+          <button id="pipelineConfirmBtn" class="send-btn pipeline-confirm-btn" data-i18n="pipeline.confirm_btn">确认</button>
+        </div>
       </div>
     </div>
     <!-- Tool UI 配置：必须在 app.js 之前 -->

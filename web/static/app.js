@@ -13,9 +13,9 @@ const __OS_LANG_STORAGE_KEY = "openstoryline_lang_v1";
 const QUICK_PROMPTS = [
   { zh: "详细介绍一下你能做什么", en: "Please describe in detail what you can do." },
   { zh: "帮我找10个夏日海滩素材，剪一个欢快的旅行vlog", en: "Please help me find some summer beach footage and edit it into a 30-second travel vlog." },
-  { zh: "我准备长期批量做同类视频，先帮我剪一条示范成片；之后把这套偏好总结成可复用的剪辑风格 Skill。", en: "I plan to produce similar videos in batches over a long period. First, help me edit a sample video; then, help me summarize this set of preferences into a reusable editing style skill."},
-  { zh: "根据我的素材内容，仿照鲁迅文风生成文案。", en: "Based on my footage, please generate a Shakespearean-style video script."},
-  { zh: "帮我找一些中国春节相关素材，筛选出最有年味的场景，选择喜庆的 BGM", en: "Please help me find some materials related to Chinese New Year, filter out the most festive scenes, and choose celebratory background music."},
+  { zh: "我准备长期批量做同类视频，先帮我剪一条示范成片；之后把这套偏好总结成可复用的剪辑风格 Skill。", en: "I plan to produce similar videos in batches over a long period. First, help me edit a sample video; then, help me summarize this set of preferences into a reusable editing style skill." },
+  { zh: "根据我的素材内容，仿照鲁迅文风生成文案。", en: "Based on my footage, please generate a Shakespearean-style video script." },
+  { zh: "帮我找一些中国春节相关素材，筛选出最有年味的场景，选择喜庆的 BGM", en: "Please help me find some materials related to Chinese New Year, filter out the most festive scenes, and choose celebratory background music." },
 ];
 
 const __OS_I18N = {
@@ -55,7 +55,8 @@ const __OS_I18N = {
     "sidebar.custom_vlm_apikey_ph": "API Key",
     "sidebar.custom_hint": "提示：API Key 仅用于本会话的服务端调用；页面与 Tool trace 会自动脱敏，不会显示明文。",
     "sidebar.tts_box_aria": "TTS 服务配置",
-    "sidebar.tts_title": "TTS 配置",
+    "sidebar.tts_title": "TTS 配音",
+    "sidebar.tts_voice_label": "选择音色",
     "sidebar.tts_provider_select_aria": "选择 TTS 服务厂家",
     "sidebar.tts_default": "使用默认配置",
     "sidebar.tts_hint": "提示：字段留空将使用 config.toml 中的配置。",
@@ -162,7 +163,8 @@ const __OS_I18N = {
     "sidebar.custom_vlm_apikey_ph": "API key",
     "sidebar.custom_hint": "Note: API keys are used only for server-side calls in this session. They are masked in the UI and tool trace.",
     "sidebar.tts_box_aria": "TTS configuration",
-    "sidebar.tts_title": "TTS",
+    "sidebar.tts_title": "TTS Voice",
+    "sidebar.tts_voice_label": "Select Voice",
     "sidebar.tts_provider_select_aria": "Select a TTS provider",
     "sidebar.tts_default": "Use default configuration",
     "sidebar.tts_hint": "Note: leaving fields empty will fall back to config.toml.",
@@ -206,7 +208,7 @@ const __OS_I18N = {
     "toast.delete_failed": "Delete failed: {msg}",
     "toast.uploading_cannot_send": "Media is uploading. Please wait until it finishes before sending.",
     "toast.uploading_interrupt_send": "Media is uploading, so a new message can't be sent yet. I interrupted the current reply; press Enter after the upload finishes.",
-    
+
     // tools
     "tool.card.default_name": "Tool call",
     "tool.card.fallback_name": "MCP Tool",
@@ -251,7 +253,7 @@ function __osLoadLang() {
 }
 
 function __osSaveLang(lang) {
-  try { localStorage.setItem(__OS_LANG_STORAGE_KEY, lang); } catch {}
+  try { localStorage.setItem(__OS_LANG_STORAGE_KEY, lang); } catch { }
 }
 
 function __osFormat(tpl, vars) {
@@ -493,7 +495,7 @@ class ApiClient {
         }
         if (typeof j.message === "string") return ra != null ? `${j.message}${__t("common.retry_after_suffix", { seconds: ra })}` : j.message;
       }
-    } catch {}
+    } catch { }
     return t || `HTTP ${r.status}`;
   }
 
@@ -554,7 +556,7 @@ class ApiClient {
             const m = j.detail.message || j.detail.detail || j.detail.error || JSON.stringify(j.detail);
             msg = ra != null ? `${m}${__t("common.retry_after_suffix", { seconds: ra })}` : m;
           }
-        } catch {}
+        } catch { }
         reject(new Error(msg));
       };
 
@@ -574,7 +576,7 @@ class ApiClient {
   async cancelResumableMedia(sessionId, uploadId) {
     try {
       await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/media/${encodeURIComponent(uploadId)}/cancel`, { method: "POST" });
-    } catch {}
+    } catch { }
   }
 
   // 单文件：init -> chunk... -> complete
@@ -659,14 +661,14 @@ class WsClient {
         reason: ev?.reason,
         wasClean: ev?.wasClean,
       });
-      
+
       if (this._closedByUser) return;
 
       // session 不存在就不要重连
       if (ev && ev.code === 4404) {
-      localStorage.removeItem("openstoryline_session_id");
-      location.reload();
-      return;
+        localStorage.removeItem("openstoryline_session_id");
+        location.reload();
+        return;
       }
 
       setTimeout(() => this.connect(), 1000);
@@ -678,7 +680,7 @@ class WsClient {
     if (this._timer) clearInterval(this._timer);
     this._timer = null;
     if (this.ws) {
-      try { this.ws.close(1000, "client switch session"); } catch {}
+      try { this.ws.close(1000, "client switch session"); } catch { }
       this.ws = null;
     }
   }
@@ -849,13 +851,13 @@ class ChatUI {
     // 清掉 tool 外部媒体块
     if (this.toolMediaDomById) {
       for (const [, dom] of this.toolMediaDomById) {
-        try { dom?.wrap?.remove(); } catch {}
+        try { dom?.wrap?.remove(); } catch { }
       }
       this.toolMediaDomById.clear();
     }
 
   }
-  
+
   setBubbleContent(bubbleEl, text, { markdown = true } = {}) {
     const s = String(text ?? "");
 
@@ -1032,7 +1034,7 @@ class ChatUI {
     this.setBubbleContent(cur.bubbleEl, md);
 
     if (wasNearBottom) this.scrollToBottom({ behavior: "auto" });
-    else this._updateScrollJumpBtnVisibility(true); 
+    else this._updateScrollJumpBtnVisibility(true);
   }
 
   appendAssistantDelta(delta) {
@@ -1063,7 +1065,7 @@ class ChatUI {
   finalizeAssistant(text) {
     const wasNearBottom = this.isNearBottom();
     if (!this.currentAssistant) {
-      this.startAssistantMessage({ placeholder: false});
+      this.startAssistantMessage({ placeholder: false });
     }
     const cur = this.currentAssistant;
     cur.rawText = (text ?? cur.rawText ?? "").trim();
@@ -1131,14 +1133,14 @@ class ChatUI {
 
     const labels =
       (cfg.labels && typeof cfg.labels === "object") ? cfg.labels :
-      (window.OPENSTORYLINE_TOOL_LABELS && typeof window.OPENSTORYLINE_TOOL_LABELS === "object") ? window.OPENSTORYLINE_TOOL_LABELS :
-      {};
+        (window.OPENSTORYLINE_TOOL_LABELS && typeof window.OPENSTORYLINE_TOOL_LABELS === "object") ? window.OPENSTORYLINE_TOOL_LABELS :
+          {};
 
     const estimatesMs =
       (cfg.estimates_ms && typeof cfg.estimates_ms === "object") ? cfg.estimates_ms :
-      (cfg.estimatesMs && typeof cfg.estimatesMs === "object") ? cfg.estimatesMs :
-      (window.OPENSTORYLINE_TOOL_ESTIMATES && typeof window.OPENSTORYLINE_TOOL_ESTIMATES === "object") ? window.OPENSTORYLINE_TOOL_ESTIMATES :
-      {};
+        (cfg.estimatesMs && typeof cfg.estimatesMs === "object") ? cfg.estimatesMs :
+          (window.OPENSTORYLINE_TOOL_ESTIMATES && typeof window.OPENSTORYLINE_TOOL_ESTIMATES === "object") ? window.OPENSTORYLINE_TOOL_ESTIMATES :
+            {};
 
     const defaultEstimateMs = Number(cfg.default_estimate_ms ?? cfg.defaultEstimateMs ?? 8000);
     const tickMs = Number(cfg.tick_ms ?? cfg.tickMs ?? 120);
@@ -1433,17 +1435,17 @@ class ChatUI {
       };
       this.toolDomById.set(tool_call_id, dom);
     }
-  
+
     // merge patch -> dom.data（关键：progress/end 不传 args 时要保留 start 的 args）
     const d = dom.data || {};
     const merged = {
       server: (patch && patch.server != null) ? patch.server : d.server,
-      name:   (patch && patch.name != null)   ? patch.name   : d.name,
-      state:  (patch && patch.state != null)  ? patch.state  : d.state,
+      name: (patch && patch.name != null) ? patch.name : d.name,
+      state: (patch && patch.state != null) ? patch.state : d.state,
       progress: (patch && typeof patch.progress === "number") ? patch.progress : d.progress,
       message: (patch && Object.prototype.hasOwnProperty.call(patch, "message")) ? (patch.message || "") : d.message,
       summary: (patch && Object.prototype.hasOwnProperty.call(patch, "summary")) ? patch.summary : d.summary,
-      args:    (patch && Object.prototype.hasOwnProperty.call(patch, "args")) ? patch.args : d.args,
+      args: (patch && Object.prototype.hasOwnProperty.call(patch, "args")) ? patch.args : d.args,
     };
     dom.data = merged;
 
@@ -1538,7 +1540,7 @@ class ChatUI {
 
         const t = v.trim();
         if ((t.startsWith("{") && t.endsWith("}")) || (t.startsWith("[") && t.endsWith("]"))) {
-          try { v = JSON.stringify(JSON.parse(t), null, 2); } catch {}
+          try { v = JSON.stringify(JSON.parse(t), null, 2); } catch { }
         }
         lines.push(`\n${v}`);
       } else if (v != null) {
@@ -1897,7 +1899,7 @@ class ChatUI {
   _removeToolMediaMessage(tool_call_id) {
     const dom = this.toolMediaDomById && this.toolMediaDomById.get(tool_call_id);
     if (dom) {
-      try { dom.wrap?.remove(); } catch {}
+      try { dom.wrap?.remove(); } catch { }
       this.toolMediaDomById.delete(tool_call_id);
     }
   }
@@ -1956,7 +1958,7 @@ class ChatUI {
         if (toolCardDom && toolCardDom.wrap && dom.wrap && toolCardDom.wrap.nextSibling !== dom.wrap) {
           toolCardDom.wrap.after(dom.wrap);
         }
-      } catch {}
+      } catch { }
     }
 
     this._renderToolMediaPreview({ preview: dom.preview, details: null }, merged);
@@ -2091,7 +2093,7 @@ class ChatUI {
     return false;
   }
 
-  
+
 
   // 只认为“显式 scheme”的才是网络 URL，避免把 .server_cache/... 误判成 http(s) 相对 URL
   _isAbsoluteNetworkUrl(s) {
@@ -2295,7 +2297,7 @@ class ChatUI {
 
   escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({
-      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
     }[c]));
   }
 }
@@ -2334,6 +2336,7 @@ class App {
     this.ttsBox = $("#ttsBox");
     this.ttsProviderSelect = $("#ttsProviderSelect");
     this.ttsProviderFieldsHost = $("#ttsProviderFields");
+    this.ttsVoiceSelect = null; // will be created dynamically
     this.ttsUiSchema = null;
 
     // Pexels UI
@@ -2356,6 +2359,24 @@ class App {
     this.sendBtn = $("#sendBtn");
     this.quickPromptBtn = $("#quickPromptBtn");
     this._quickPromptIdx = 0;
+
+    // Pipeline
+    this.pipelineBtn = $("#pipelineBtn");
+    this.pipelineModal = $("#pipelineModal");
+    this.pipelineModalClose = $("#pipelineModalClose");
+    this.pipelineModalBackdrop = $("#pipelineModalBackdrop");
+    this.pipelineTemplateList = $("#pipelineTemplateList");
+    this.pipelineConfirmModal = $("#pipelineConfirmModal");
+    this.pipelineConfirmBackdrop = $("#pipelineConfirmBackdrop");
+    this.pipelineConfirmNodeId = $("#pipelineConfirmNodeId");
+    this.pipelineConfirmParams = $("#pipelineConfirmParams");
+    this.pipelineConfirmBtn = $("#pipelineConfirmBtn");
+    this.pipelineCountdown = $("#pipelineCountdown");
+    this.pipelineRunning = false;
+    this._pipelineSteps = {};
+    this._pipelineProgressEl = null;
+    this._pipelineConfirmTimer = null;
+
     this.sidebarToggleBtn = $("#sidebarToggle");
     this.createDialogBtn = $("#createDialogBtn");
     this.devbarToggleBtn = $("#devbarToggle");
@@ -2424,82 +2445,62 @@ class App {
   }
 
   _renderTtsUiFromSchema(schema) {
-    if (!this.ttsProviderSelect || !this.ttsProviderFieldsHost) return;
+    // New: render a voice selector dropdown instead of provider+fields
+    const host = this.ttsProviderFieldsHost || $("#ttsProviderFields");
+    if (!host) return;
 
-    const providers = (schema && Array.isArray(schema.providers)) ? schema.providers : [];
-    const before = String(this.ttsProviderSelect.value || "").trim();
+    // Hide the old provider select (no longer needed)
+    if (this.ttsProviderSelect) this.ttsProviderSelect.style.display = "none";
 
-    this.ttsProviderSelect.innerHTML = "";
-    const opt0 = document.createElement("option");
-    opt0.value = "";
-    opt0.textContent = __t("sidebar.tts_default");
-    this.ttsProviderSelect.appendChild(opt0);
+    const voices = (schema && Array.isArray(schema.voices)) ? schema.voices : [];
+    if (!voices.length) return;
 
-    for (const v of providers) {
-      const provider = String(v?.provider || "").trim();
-      if (!provider) continue;
-      const label = String(v?.label || provider);
+    host.innerHTML = "";
 
-      const opt = document.createElement("option");
-      opt.value = provider;
-      opt.textContent = label;
-      this.ttsProviderSelect.appendChild(opt);
+    // Create voice <select>
+    const sel = document.createElement("select");
+    sel.className = "sidebar-input";
+    sel.id = "ttsVoiceSelect";
+    sel.setAttribute("aria-label", __t("sidebar.tts_voice_label") || "选择音色");
+
+    // Group voices by optgroup
+    const groups = new Map();
+    let defaultIndex = "";
+    for (const v of voices) {
+      const group = v.group || "Other";
+      if (!groups.has(group)) groups.set(group, []);
+      groups.get(group).push(v);
+      if (v.default) defaultIndex = v.index;
     }
 
-    this.ttsProviderFieldsHost.innerHTML = "";
-
-    for (const v of providers) {
-      const provider = String(v?.provider || "").trim();
-      if (!provider) continue;
-
-      const block = document.createElement("div");
-      block.className = "sidebar-tts-fields hidden";
-      block.dataset.ttsProvider = provider;
-
-      const fields = Array.isArray(v?.fields) ? v.fields : [];
-
-      for (const f of fields) {
-        const key = String(f?.key || "").trim();
-        if (!key) continue;
-
-        const label = String(f?.label || key).trim();
-
-        const required = !!f?.required;
-        const secret = !!f?.secret;
-
-        const input = document.createElement("input");
-        input.className = "sidebar-input";
-        input.type = secret ? "password" : "text";
-        input.autocomplete = "off";
-        const basePh = String(f?.placeholder || label).trim();
-        const needSuffix = !f?.placeholder; // 仅当 schema 没给 placeholder 时，加“留空使用默认”的 suffix
-
-        input.setAttribute("data-os-ph-base", basePh);
-        input.setAttribute("data-os-ph-suffix", needSuffix ? "1" : "0");
-
-        const ph = needSuffix ? `${basePh}${__t("sidebar.tts_field_suffix")}` : basePh;
-        input.placeholder = ph;
-
-        input.setAttribute("data-os-persist", `sidebar.tts.${provider}.${key}`);
-
-        input.dataset.ttsKey = key;
-
-        block.appendChild(input);
+    for (const [groupLabel, items] of groups) {
+      const og = document.createElement("optgroup");
+      og.label = groupLabel;
+      for (const v of items) {
+        const opt = document.createElement("option");
+        opt.value = v.index;
+        opt.textContent = `${v.label} (${v.index})`;
+        if (v.default) opt.selected = true;
+        og.appendChild(opt);
       }
-
-      this.ttsProviderFieldsHost.appendChild(block);
+      sel.appendChild(og);
     }
 
-    try { __osHydratePersistedFields(this.ttsBox || document); } catch {}
-    try { __osBindPersistedFields(this.ttsBox || document); } catch {}
-
-    if (before) {
-      this.ttsProviderSelect.value = before;
-    } else {
-      this.ttsProviderSelect.value = "";
+    // Restore persisted selection (safe: no string interpolation in selector)
+    const saved = localStorage.getItem("os_tts_voice_index");
+    if (saved && Array.from(sel.options).some(o => o.value === saved)) {
+      sel.value = saved;
+    } else if (defaultIndex) {
+      sel.value = defaultIndex;
     }
 
-    try { this.ttsProviderSelect.dispatchEvent(new Event("change", { bubbles: true })); } catch {}
+    // Persist on change
+    sel.addEventListener("change", () => {
+      localStorage.setItem("os_tts_voice_index", sel.value);
+    });
+
+    host.appendChild(sel);
+    this.ttsVoiceSelect = sel;
   }
 
   // restoreSidebarState() {
@@ -2606,9 +2607,9 @@ class App {
       this.ui.rerenderToast();
     }
 
-    try { this.ui?.rerenderAssistantPlaceholder?.(); } catch {}
-    try { this.ui?.rerenderToolCards?.(); } catch {}
-    try { this.ui?.rerenderToolMediaPreviews?.(); } catch {}
+    try { this.ui?.rerenderAssistantPlaceholder?.(); } catch { }
+    try { this.ui?.rerenderToolCards?.(); } catch { }
+    try { this.ui?.rerenderToolMediaPreviews?.(); } catch { }
 
     if (syncServer) this._pushLangToServer();
   }
@@ -2653,11 +2654,11 @@ class App {
   applySnapshotModels(snapshot) {
     const llmModels =
       (snapshot && Array.isArray(snapshot.llm_models)) ? snapshot.llm_models :
-      (snapshot && Array.isArray(snapshot.chat_models)) ? snapshot.chat_models : [];
+        (snapshot && Array.isArray(snapshot.chat_models)) ? snapshot.chat_models : [];
 
     const llmCurrent =
       (snapshot && typeof snapshot.llm_model_key === "string") ? snapshot.llm_model_key :
-      (snapshot && typeof snapshot.chat_model_key === "string") ? snapshot.chat_model_key : "";
+        (snapshot && typeof snapshot.chat_model_key === "string") ? snapshot.chat_model_key : "";
 
     const vlmModels = (snapshot && Array.isArray(snapshot.vlm_models)) ? snapshot.vlm_models : [];
     const vlmCurrent = (snapshot && typeof snapshot.vlm_model_key === "string") ? snapshot.vlm_model_key : "";
@@ -2712,17 +2713,7 @@ class App {
     if (this.customLlmSection) this.customLlmSection.classList.toggle("hidden", !llmCustom);
     if (this.customVlmSection) this.customVlmSection.classList.toggle("hidden", !vlmCustom);
 
-    const provider = (this.ttsProviderSelect && this.ttsProviderSelect.value)
-      ? String(this.ttsProviderSelect.value).trim()
-      : "";
-
-    const host = this.ttsProviderFieldsHost || $("#ttsProviderFields");
-    if (host) {
-      host.querySelectorAll("[data-tts-provider]").forEach((el) => {
-        const v = String(el.dataset.ttsProvider || "");
-        el.classList.toggle("hidden", !provider || v !== provider);
-      });
-    }
+    // TTS: voice selector is always visible, no provider-fields toggling needed
 
     // ---- Pexels custom key show/hide ----
     const pMode = (this.pexelsKeyModeSelect && this.pexelsKeyModeSelect.value)
@@ -2766,31 +2757,15 @@ class App {
 
 
   _readTtsConfigFromUI() {
-    const provider = (this.ttsProviderSelect && this.ttsProviderSelect.value)
-      ? String(this.ttsProviderSelect.value).trim()
-      : "";
-    if (!provider) return null;
+    // Read voice_index from the voice selector dropdown
+    const voiceSel = this.ttsVoiceSelect || $("#ttsVoiceSelect");
+    const voiceIndex = voiceSel ? String(voiceSel.value || "").trim() : "";
+    if (!voiceIndex) return null;
 
-    const host = this.ttsProviderFieldsHost || $("#ttsProviderFields");
-    const params = {};
-
-    if (host) {
-      const block = host.querySelector(`[data-tts-provider="${provider}"]`);
-      if (block) {
-        const fields = block.querySelectorAll("input[data-tts-key], select[data-tts-key], textarea[data-tts-key]");
-        fields.forEach((el) => {
-          const k = String(el.dataset.ttsKey || "").trim();
-          if (!k) return;
-          const v = String(el.value ?? "").trim();
-          if (v !== "") params[k] = v; 
-        });
-      }
-    }
-
-    // 统一 payload：{ provider, <provider>:{...} }
-    const out = { provider };
-    out[provider] = params; // 允许为空 {}
-    return out;
+    return {
+      provider: "indextts",
+      voice_index: voiceIndex,
+    };
   }
 
   _readPexelsConfigFromUI() {
@@ -2851,7 +2826,7 @@ class App {
 
   clearLocalObjectUrls() {
     for (const [, url] of this.localObjectUrlByMediaId) {
-      try { URL.revokeObjectURL(url); } catch {}
+      try { URL.revokeObjectURL(url); } catch { }
     }
     this.localObjectUrlByMediaId.clear();
   }
@@ -2867,7 +2842,7 @@ class App {
   revokeLocalUrl(mediaId) {
     const url = this.localObjectUrlByMediaId.get(mediaId);
     if (url) {
-      try { URL.revokeObjectURL(url); } catch {}
+      try { URL.revokeObjectURL(url); } catch { }
       this.localObjectUrlByMediaId.delete(mediaId);
     }
   }
@@ -2929,7 +2904,7 @@ class App {
 
     if (!cur.trim()) {
       el.value = insertText;
-      try { el.setSelectionRange(el.value.length, el.value.length); } catch {}
+      try { el.setSelectionRange(el.value.length, el.value.length); } catch { }
       el.focus();
       this._autosizePrompt();
       return;
@@ -2949,7 +2924,7 @@ class App {
     el.value = before + sep + insertText + after;
 
     const caret = (before + sep + insertText).length;
-    try { el.setSelectionRange(caret, caret); } catch {}
+    try { el.setSelectionRange(caret, caret); } catch { }
 
     el.focus();
     this._autosizePrompt();
@@ -3046,7 +3021,7 @@ class App {
               this.localObjectUrlByMediaId.set(resp.media.id, localUrl);
             } else {
               // 理论不应发生；发生就释放
-              try { URL.revokeObjectURL(localUrl); } catch {}
+              try { URL.revokeObjectURL(localUrl); } catch { }
             }
 
             confirmedBytesAll += (f.size || 0);
@@ -3055,7 +3030,7 @@ class App {
             this.setPending((resp && resp.pending_media) ? resp.pending_media : []);
           } catch (e) {
             // 本文件失败：释放 URL，避免泄漏
-            try { URL.revokeObjectURL(localUrl); } catch {}
+            try { URL.revokeObjectURL(localUrl); } catch { }
             throw e;
           }
         }
@@ -3114,7 +3089,7 @@ class App {
         this.promptInput.value = t;
         this._autosizePrompt();
         this.promptInput.focus();
-        try { this.promptInput.setSelectionRange(t.length, t.length); } catch {}
+        try { this.promptInput.setSelectionRange(t.length, t.length); } catch { }
 
         this.quickPromptBtn.classList.add("is-active");
         setTimeout(() => this.quickPromptBtn.classList.remove("is-active"), 160);
@@ -3141,6 +3116,23 @@ class App {
         const next = this.langToggle.checked ? "en" : "zh";
         this._setLang(next, { persist: true, syncServer: true });
       });
+    }
+
+    // ---- Pipeline ----
+    if (this.pipelineBtn) {
+      this.pipelineBtn.addEventListener("click", () => this._openPipelineModal());
+    }
+    if (this.pipelineModalClose) {
+      this.pipelineModalClose.addEventListener("click", () => this._closePipelineModal());
+    }
+    if (this.pipelineModalBackdrop) {
+      this.pipelineModalBackdrop.addEventListener("click", () => this._closePipelineModal());
+    }
+    if (this.pipelineConfirmBackdrop) {
+      this.pipelineConfirmBackdrop.addEventListener("click", () => { }); // block close on backdrop
+    }
+    if (this.pipelineConfirmBtn) {
+      this.pipelineConfirmBtn.addEventListener("click", () => this._confirmPipelineNode());
     }
   }
 
@@ -3189,7 +3181,7 @@ class App {
       if (item.role === "user") {
         this.ui.appendUserMessage(item.content || "", item.attachments || []);
       } else if (item.role === "assistant") {
-        this.ui.startAssistantMessage({placeholder: false});
+        this.ui.startAssistantMessage({ placeholder: false });
         this.ui.finalizeAssistant(item.content || "");
       } else if (item.role === "tool") {
         this.ui.upsertToolCard(item.tool_call_id, {
@@ -3255,7 +3247,7 @@ class App {
     if (type === "assistant.start") {
       this.streaming = true;
       this._updateComposerDisabledState();
-      this.ui.startAssistantMessage({placeholder: true});
+      this.ui.startAssistantMessage({ placeholder: true });
       return;
     }
 
@@ -3324,6 +3316,47 @@ class App {
       return;
     }
 
+    // ---- Pipeline events ----
+    if (type === "pipeline.started") {
+      this.pipelineRunning = true;
+      this._pipelineSteps = {};
+      this._closePipelineModal();
+      this._insertPipelineProgress(data);
+      return;
+    }
+
+    if (type === "pipeline.progress") {
+      this._updatePipelineStep(data);
+      return;
+    }
+
+    if (type === "pipeline.confirm") {
+      this._showPipelineConfirm(data);
+      return;
+    }
+
+    if (type === "pipeline.confirm_ack") {
+      return;
+    }
+
+    if (type === "pipeline.done") {
+      this.pipelineRunning = false;
+      this._finalizePipelineProgress("done");
+      return;
+    }
+
+    if (type === "pipeline.error") {
+      this.pipelineRunning = false;
+      this._finalizePipelineProgress("error", (data || {}).message);
+      return;
+    }
+
+    if (type === "pipeline.cancelled") {
+      this.pipelineRunning = false;
+      this._finalizePipelineProgress("cancelled");
+      return;
+    }
+
     if (type === "error") {
       this.streaming = false;
       this.canceling = false;
@@ -3341,6 +3374,245 @@ class App {
 
       this.ui.endAssistantTurn(text);
       return;
+    }
+  }
+
+  // =========================================================
+  // Pipeline helpers
+  // =========================================================
+
+  async _openPipelineModal() {
+    if (this.pipelineRunning) {
+      this.ui.showToast("Pipeline 正在运行中");
+      setTimeout(() => this.ui.hideToast(), 1400);
+      return;
+    }
+    // Fetch templates
+    try {
+      const resp = await fetch("/api/templates");
+      const data = await resp.json();
+      this._renderTemplateList(data.templates || []);
+      if (this.pipelineModal) {
+        this.pipelineModal.classList.remove("hidden");
+        this.pipelineModal.setAttribute("aria-hidden", "false");
+      }
+    } catch (e) {
+      this.ui.showToast("加载模板失败: " + (e.message || e));
+      setTimeout(() => this.ui.hideToast(), 1800);
+    }
+  }
+
+  _closePipelineModal() {
+    if (this.pipelineModal) {
+      this.pipelineModal.classList.add("hidden");
+      this.pipelineModal.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  _renderTemplateList(templates) {
+    if (!this.pipelineTemplateList) return;
+    const lang = this.lang || "zh";
+    this.pipelineTemplateList.innerHTML = templates.map(t => {
+      const modeLabel = t.auto_mode === "semi_auto"
+        ? (lang === "zh" ? "半自动" : "Semi-auto")
+        : (lang === "zh" ? "全自动" : "Full-auto");
+      const nodeCount = (t.nodes || []).filter(n => n.mode !== "skip").length;
+      return `
+        <div class="pipeline-template-card ${t.is_preset ? 'is-preset' : ''}"
+             data-template-id="${t.template_id}">
+          <div class="pipeline-template-card-name">${this._escHtml(t.name)}</div>
+          <div class="pipeline-template-card-desc">${this._escHtml(t.description)}</div>
+          <div class="pipeline-template-card-meta">
+            <span class="pipeline-template-badge">${modeLabel}</span>
+            <span class="pipeline-template-badge">${nodeCount} ${lang === "zh" ? "步" : "steps"}</span>
+            ${t.is_preset ? `<span class="pipeline-template-badge">${lang === "zh" ? "预设" : "Preset"}</span>` : ""}
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    // Click handler
+    this.pipelineTemplateList.querySelectorAll(".pipeline-template-card").forEach(card => {
+      card.addEventListener("click", () => {
+        const id = card.getAttribute("data-template-id");
+        if (id && this.ws) {
+          this.ws.send("pipeline.start", { template_id: id });
+        }
+      });
+    });
+  }
+
+  _getNodeLabel(nodeId) {
+    const cfg = window.OPENSTORYLINE_TOOL_UI || {};
+    const labels = cfg.labels || {};
+    const key = (nodeId || "").toLowerCase().replace(/-/g, "_");
+    const label = labels[key] || labels[nodeId];
+    if (label) {
+      const lang = this.lang || "zh";
+      return label[lang] || label.zh || label.en || nodeId;
+    }
+    return nodeId;
+  }
+
+  _escHtml(s) {
+    const d = document.createElement("div");
+    d.textContent = s || "";
+    return d.innerHTML;
+  }
+
+  _insertPipelineProgress(data) {
+    const chat = $("#chat");
+    if (!chat) return;
+
+    const el = document.createElement("div");
+    el.className = "pipeline-progress";
+    el.id = "pipelineProgressPanel";
+    el.innerHTML = `
+      <div class="pipeline-progress-header">
+        <span class="pipeline-progress-title">\u26a1 ${this._escHtml(data.template_name || "Pipeline")}</span>
+        <span class="pipeline-progress-overall" id="pipelineOverall">0%</span>
+      </div>
+      <div class="pipeline-progress-bar">
+        <div class="pipeline-progress-bar-fill" id="pipelineBarFill"></div>
+      </div>
+      <div class="pipeline-step-list" id="pipelineStepList"></div>
+    `;
+    chat.appendChild(el);
+    this._pipelineProgressEl = el;
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  _updatePipelineStep(data) {
+    const { node_id, status, progress, message } = data || {};
+    if (!node_id) return;
+
+    this._pipelineSteps[node_id] = { status, progress, message };
+
+    // Update overall bar
+    const overallEl = document.getElementById("pipelineOverall");
+    const barEl = document.getElementById("pipelineBarFill");
+    if (overallEl) overallEl.textContent = Math.round((progress || 0) * 100) + "%";
+    if (barEl) barEl.style.width = Math.round((progress || 0) * 100) + "%";
+
+    // Update step list
+    const listEl = document.getElementById("pipelineStepList");
+    if (!listEl) return;
+
+    let stepEl = listEl.querySelector(`[data-step-id="${node_id}"]`);
+    if (!stepEl) {
+      stepEl = document.createElement("div");
+      stepEl.className = "pipeline-step";
+      stepEl.setAttribute("data-step-id", node_id);
+      stepEl.innerHTML = `
+        <span class="pipeline-step-icon"></span>
+        <span class="pipeline-step-name">${this._getNodeLabel(node_id)}</span>
+        <span class="pipeline-step-msg"></span>
+      `;
+      listEl.appendChild(stepEl);
+    }
+
+    // Status class
+    stepEl.className = "pipeline-step";
+    const iconEl = stepEl.querySelector(".pipeline-step-icon");
+    const msgEl = stepEl.querySelector(".pipeline-step-msg");
+
+    if (status === "running" || status === "waiting_confirm") {
+      stepEl.classList.add("is-running");
+      if (iconEl) iconEl.textContent = "\u25b6";
+    } else if (status === "done") {
+      stepEl.classList.add("is-done");
+      if (iconEl) iconEl.textContent = "\u2713";
+    } else if (status === "error") {
+      stepEl.classList.add("is-error");
+      if (iconEl) iconEl.textContent = "\u2717";
+    } else if (status === "skipped") {
+      stepEl.classList.add("is-skipped");
+      if (iconEl) iconEl.textContent = "\u2014";
+    } else if (status === "cancelled") {
+      stepEl.classList.add("is-skipped");
+      if (iconEl) iconEl.textContent = "\u23f8";
+    }
+
+    if (msgEl) msgEl.textContent = message || "";
+
+    // Auto-scroll
+    const chat = $("#chat");
+    if (chat) chat.scrollTop = chat.scrollHeight;
+  }
+
+  _finalizePipelineProgress(finalStatus, errorMsg) {
+    const overallEl = document.getElementById("pipelineOverall");
+    if (overallEl) {
+      if (finalStatus === "done") {
+        overallEl.textContent = "100% \u2713";
+      } else if (finalStatus === "error") {
+        overallEl.textContent = "\u274c " + (errorMsg || "Error");
+      } else {
+        overallEl.textContent = "\u23f8 Cancelled";
+      }
+    }
+    if (finalStatus === "done") {
+      const barEl = document.getElementById("pipelineBarFill");
+      if (barEl) barEl.style.width = "100%";
+    }
+    // Close confirm modal if open
+    this._closePipelineConfirm();
+  }
+
+  _showPipelineConfirm(data) {
+    const { node_id, params, timeout_sec } = data || {};
+    if (!this.pipelineConfirmModal) return;
+
+    if (this.pipelineConfirmNodeId) {
+      this.pipelineConfirmNodeId.textContent = this._getNodeLabel(node_id);
+    }
+    if (this.pipelineConfirmParams) {
+      this.pipelineConfirmParams.textContent = JSON.stringify(params || {}, null, 2);
+    }
+    this._pipelineConfirmNodeId = node_id;
+
+    this.pipelineConfirmModal.classList.remove("hidden");
+    this.pipelineConfirmModal.setAttribute("aria-hidden", "false");
+
+    // Countdown
+    let remaining = timeout_sec || 10;
+    if (this.pipelineCountdown) this.pipelineCountdown.textContent = remaining;
+
+    if (this._pipelineConfirmTimer) clearInterval(this._pipelineConfirmTimer);
+    this._pipelineConfirmTimer = setInterval(() => {
+      remaining--;
+      if (this.pipelineCountdown) this.pipelineCountdown.textContent = Math.max(0, remaining);
+      if (remaining <= 0) {
+        clearInterval(this._pipelineConfirmTimer);
+        this._pipelineConfirmTimer = null;
+        this._closePipelineConfirm();
+      }
+    }, 1000);
+  }
+
+  _confirmPipelineNode() {
+    if (this._pipelineConfirmTimer) {
+      clearInterval(this._pipelineConfirmTimer);
+      this._pipelineConfirmTimer = null;
+    }
+    // Send current params back (could be edited in future)
+    const paramsText = this.pipelineConfirmParams ? this.pipelineConfirmParams.textContent : "{}";
+    let params = {};
+    try { params = JSON.parse(paramsText); } catch { }
+    if (this.ws) {
+      this.ws.send("pipeline.confirm_response", { node_id: this._pipelineConfirmNodeId, params });
+    }
+    this._closePipelineConfirm();
+  }
+
+  _closePipelineConfirm() {
+    if (this._pipelineConfirmTimer) {
+      clearInterval(this._pipelineConfirmTimer);
+      this._pipelineConfirmTimer = null;
+    }
+    if (this.pipelineConfirmModal) {
+      this.pipelineConfirmModal.classList.add("hidden");
+      this.pipelineConfirmModal.setAttribute("aria-hidden", "true");
     }
   }
 
@@ -3601,11 +3873,11 @@ function __osHydratePersistedFields(root = document) {
       } else {
         el.value = String(v);
       }
-    } catch {}
+    } catch { }
   });
 
   root.querySelectorAll('select[data-os-persist]').forEach((sel) => {
-    try { sel.dispatchEvent(new Event("change", { bubbles: true })); } catch {}
+    try { sel.dispatchEvent(new Event("change", { bubbles: true })); } catch { }
   });
 
   return cfg;
