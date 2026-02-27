@@ -160,7 +160,11 @@ def _resolve_default_model_override(cfg: Settings, model_name: str) -> Tuple[Opt
 # ---------------------------------------------------------------------------
 
 _VLM_KEYWORDS = {"vl", "vision", "ocr"}
-_EXCLUDE_KEYWORDS = {"embedding", "embed", "asr", "audio", "rerank", "mt-", "paraformer"}
+_EXCLUDE_KEYWORDS = {
+    "embedding", "embed", "asr", "audio", "rerank", "mt-", "paraformer",
+    "tts", "s2s", "image-edit", "image-max", "image-plus", "image-turbo",
+    "z-image", "gui-", "livetranslate",
+}
 
 def _classify_model(model_id: str) -> str:
     m = model_id.lower()
