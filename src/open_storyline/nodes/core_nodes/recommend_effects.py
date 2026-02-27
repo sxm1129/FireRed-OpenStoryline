@@ -107,10 +107,11 @@ class RecommendTextNode(BaseNode):
         )
         try:
             selected_json = parse_json_dict(raw)
-        except:
-            selected_json = (raw or "").strip() if raw else "Error: Unable to parse the model output"
-            node_state.node_summary.add_error(selected_json)
+        except Exception as e:
+            err_msg = (raw or "").strip() if raw else "Error: Unable to parse the model output"
+            node_state.node_summary.add_error(f"{err_msg}: {e}")
             return None
         selected_json.update({"font_color": inputs.get("font_color", (255,255,255,255))})
-        node_state.node_summary.info_for_user(f"[{self.meta.node_id}] Use font `{selected_json['font_name']}`")
+        font_name = selected_json.get("font_name", "Noto Sans SC")
+        node_state.node_summary.info_for_user(f"[{self.meta.node_id}] Use font `{font_name}`")
         return [selected_json]

@@ -3,8 +3,8 @@ from pydantic import BaseModel
 import traceback
 from collections import Counter
 from pathlib import Path
-from moviepy.video.io.ffmpeg_reader import ffmpeg_parse_infos
 
+import av
 
 from open_storyline.nodes.core_nodes.base_node import NodeMeta, BaseNode
 from open_storyline.nodes.node_schema import LoadMediaInput, LoadMediaOutput
@@ -36,12 +36,6 @@ def _image_metadata_from_path(path: Path) -> dict[str, Any]:
     }
 
 
-import av
-from fractions import Fraction
-from typing import Any, Optional
-from pathlib import Path
-
-
 def _video_metadata_from_path(
     path: Path,
     *,
@@ -49,53 +43,53 @@ def _video_metadata_from_path(
 ) -> dict[str, Any]:
     
     container = av.open(str(path))
+    try:
+        # 找第一个视频流
+        video_stream = next(
+            (s for s in container.streams if s.type == "video"),
+            None,
+        )
+        if video_stream is None:
+            raise ValueError(f"No video stream found: {path}")
 
-    # 找第一个视频流
-    video_stream = next(
-        (s for s in container.streams if s.type == "video"),
-        None,
-    )
-    if video_stream is None:
-        raise ValueError(f"No video stream found: {path}")
+        # ---------- duration ----------
+        duration_sec = 0.0
 
-    # ---------- duration ----------
-    duration_sec = 0.0
+        if container.duration is not None:
+            # container.duration 单位是 microseconds
+            duration_sec = container.duration / 1_000_000
+        elif video_stream.duration is not None and video_stream.time_base is not None:
+            duration_sec = float(video_stream.duration * video_stream.time_base)
 
-    if container.duration is not None:
-        # container.duration 单位是 microseconds
-        duration_sec = container.duration / 1_000_000
-    elif video_stream.duration is not None and video_stream.time_base is not None:
-        duration_sec = float(video_stream.duration * video_stream.time_base)
+        if round_duration_ndigits is not None:
+            duration_sec = round(duration_sec, round_duration_ndigits)
 
-    if round_duration_ndigits is not None:
-        duration_sec = round(duration_sec, round_duration_ndigits)
+        # ---------- width / height / rotation ----------
+        w = int(video_stream.codec_context.width or 0)
+        h = int(video_stream.codec_context.height or 0)
 
-    # ---------- width / height / rotation ----------
-    w = int(video_stream.codec_context.width or 0)
-    h = int(video_stream.codec_context.height or 0)
+        rotation = get_video_rotation(path)
 
-    rotation = get_video_rotation(path)
+        if abs(rotation) in (90, 270):
+            w, h = h, w
 
-    if abs(rotation) in (90, 270):
-        w, h = h, w
+        # ---------- fps ----------
+        fps = 0.0
+        if video_stream.average_rate:
+            fps = float(video_stream.average_rate)
+        elif video_stream.base_rate:
+            fps = float(video_stream.base_rate)
 
-    # ---------- fps ----------
-    fps = 0.0
-    if video_stream.average_rate:
-        fps = float(video_stream.average_rate)
-    elif video_stream.base_rate:
-        fps = float(video_stream.base_rate)
+        # ---------- audio ----------
+        audio_stream = next(
+            (s for s in container.streams if s.type == "audio"),
+            None,
+        )
 
-    # ---------- audio ----------
-    audio_stream = next(
-        (s for s in container.streams if s.type == "audio"),
-        None,
-    )
-
-    has_audio = audio_stream is not None
-    audio_sample_rate_hz = int(audio_stream.rate) if audio_stream and audio_stream.rate else 0
-
-    container.close()
+        has_audio = audio_stream is not None
+        audio_sample_rate_hz = int(audio_stream.rate) if audio_stream and audio_stream.rate else 0
+    finally:
+        container.close()
 
     return {
         "duration": int(duration_sec * 1000),  # ms
