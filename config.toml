@@ -1,19 +1,19 @@
 # ============= 开发者选项 / Developer Options ===============
 [developer]
 developer_mode = false
-default_llm = "deepseek-chat"
+default_llm = "qwen-plus"
 default_vlm = "qwen3-vl-8b-instruct"
 print_context = false # 在拦截器打印模型拿到的全部上下文，会很长 / Print full context in interceptor (output will be very long)
 
 # ============= 模型配置 for 体验网页 ===============
-[developer.chat_models_config."deepseek-chat"]
-base_url = ""
-api_key = ""
+[developer.chat_models_config."qwen-plus"]
+base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+api_key = "sk-377720bfd71b4b27a1ff0671bf6e304a"
 temperature = 0.1
 
 [developer.chat_models_config."qwen3-vl-8b-instruct"]
-base_url = ""
-api_key = "" 
+base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+api_key = "sk-377720bfd71b4b27a1ff0671bf6e304a" 
 timeout = 20.0
 temperature = 0.1
 max_retries = 2
@@ -26,17 +26,17 @@ outputs_dir = "./outputs"
 
 # ============= 模型配置 for user / Model Config for User =============
 [llm]
-model = "deepseek-chat"
-base_url = ""
-api_key = "" 
+model = "qwen-plus"
+base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+api_key = "sk-377720bfd71b4b27a1ff0671bf6e304a" 
 timeout = 30.0 # 单位：秒
 temperature = 0.1
 max_retries = 2
 
 [vlm]
 model = "qwen3-vl-8b-instruct"
-base_url = ""
-api_key = "" 
+base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+api_key = "sk-377720bfd71b4b27a1ff0671bf6e304a" 
 timeout = 20.0 # 单位：秒
 temperature = 0.1
 max_retries = 2
@@ -92,18 +92,8 @@ script_template_info_path = "./resource/script_templates/meta.json"
 [generate_voiceover]
 tts_provider_params_path = "./resource/tts/tts_providers.json"
 
-[generate_voiceover.providers.302]
-base_url = ""
-api_key = ""
-
-[generate_voiceover.providers.bytedance]
-uid = ""
-appid = ""
-access_token = ""
-
-[generate_voiceover.providers.minimax]
-base_url = ""
-api_key = ""
+[generate_voiceover.providers.indextts]
+base_url = "http://39.102.122.9:8049"
 
 
 # ============= BGM选择 / BGM Selection ====================
