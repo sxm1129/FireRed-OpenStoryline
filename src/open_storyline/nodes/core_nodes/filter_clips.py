@@ -84,9 +84,9 @@ class FilterClipsNode(BaseNode):
             select_ids = _extract_selected_ids(obj, input_clip_ids)
             node_state.node_summary.info_for_user(f"Successfully filtered {len(select_ids)} clips")
         
-        except:
+        except Exception as e:
             select_ids = input_clip_ids
-            node_state.node_summary.info_for_user("Failed to parse model output, using all clips")
+            node_state.node_summary.info_for_user(f"Failed to parse model output, using all clips: {e}")
 
         return {
             "clip_captions": clip_captions,

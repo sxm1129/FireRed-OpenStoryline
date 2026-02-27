@@ -276,6 +276,11 @@ class MediaCache:
             close_quietly(v)
         for a in self._audio_to_close:
             close_quietly(a)
+        self._video_sources.clear()
+        self._audio_sources.clear()
+        self._audio_to_close.clear()
+        self._image_padded_frame_cache.clear()
+        self._video_size_cache.clear()
 
     def get_audio(self, path: str) -> AudioFileClip:
         cached = self._audio_sources.get(path)
@@ -294,17 +299,21 @@ class MediaCache:
         src_w, src_h = self._probe_video_size(path)
         canvas_w, canvas_h = self._canvas_size
 
+        if src_w <= 0 or src_h <= 0:
+            raise ValueError(
+                f"Cannot determine video dimensions for '{path}' "
+                f"(got {src_w}x{src_h}). File may be corrupted or unsupported."
+            )
+
         # fit into canvas and <=1080
         max_w = min(canvas_w, MAX_MEDIA_DIMENSION_PX)
         max_h = min(canvas_h, MAX_MEDIA_DIMENSION_PX)
 
-        if src_w > 0 and src_h > 0:
-            scale = min(max_w / float(src_w), max_h / float(src_h))
-
-            target_w = make_even(int(src_w * scale))
-            target_h = make_even(int(src_h * scale))
-            src_ratio = src_w / float(src_h)
-            canvas_ratio = canvas_w / float(canvas_h)
+        scale = min(max_w / float(src_w), max_h / float(src_h))
+        target_w = make_even(int(src_w * scale))
+        target_h = make_even(int(src_h * scale))
+        src_ratio = src_w / float(src_h)
+        canvas_ratio = canvas_w / float(canvas_h)
         
         clip = VideoFileClip(path, audio=self._include_video_audio, target_resolution=(src_w, src_h))
 

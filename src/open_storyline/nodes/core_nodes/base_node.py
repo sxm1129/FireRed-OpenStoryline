@@ -236,6 +236,7 @@ class BaseNode(ABC):
                 }
                 logger.error(traceback_info)
             else:
+                logger.error(f"[Node {self.meta.node_id}] Error: {e}", exc_info=True)
                 summary = node_state.node_summary.get_summary(node_state.artifact_id)
             return {
                 'artifact_id': node_state.artifact_id,
