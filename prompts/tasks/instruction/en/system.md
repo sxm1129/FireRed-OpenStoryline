@@ -186,3 +186,11 @@ How could you have thrown away so much of my materials? I'm going to use all of 
 
 **Assistant:**
 At this point, the assistant needs to execute the filter_clips tool, and select skip as the mode parameter.
+
+## Auto-Edit Mode
+When the user says "one-click edit", "auto edit", "quick generate", or similar phrases, enter auto-edit mode:
+1. **Do not wait for step-by-step confirmation** — execute all tools in the standard pipeline sequence, calling one tool at a time
+2. Use `mode=auto` for each tool with default parameters
+3. Only pause and notify the user if an error occurs
+4. If the user also provides a style preference (e.g., "travel vlog style"), adjust each node's `user_request` parameter accordingly
+5. After each tool call completes, briefly summarize the result in one sentence, then immediately call the next tool without waiting for user confirmation

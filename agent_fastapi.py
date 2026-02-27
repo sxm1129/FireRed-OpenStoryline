@@ -52,6 +52,9 @@ from open_storyline.config import Settings
 from open_storyline.storage.agent_memory import ArtifactStore
 from open_storyline.mcp.hooks.node_interceptors import ToolInterceptor
 from open_storyline.mcp.hooks.chat_middleware import set_mcp_log_sink, reset_mcp_log_sink
+from open_storyline.pipeline.edit_template import EditTemplate, NodeConfig
+from open_storyline.pipeline.template_store import TemplateStore
+from open_storyline.pipeline.pipeline_executor import PipelineExecutor
 
 WEB_DIR = os.path.join(ROOT_DIR, "web")
 STATIC_DIR = os.path.join(WEB_DIR, "static")
@@ -207,10 +210,15 @@ def _parse_service_config(service_cfg: Any) -> Tuple[
     tts_cfg: Dict[str, Any] = {}
     tts = service_cfg.get("tts")
     if isinstance(tts, dict):
-        provider = (tts.get("provider") or "").strip().lower()
-        if provider:
-            provider_block = tts.get(provider)
-            tts_cfg = {"provider": provider, provider: provider_block}
+        provider = (tts.get("provider") or "indextts").strip().lower()
+        voice_index = (tts.get("voice_index") or "").strip()
+        tts_cfg = {"provider": provider}
+        if voice_index:
+            tts_cfg["voice_index"] = voice_index
+        # Also carry any provider sub-block (backward compat)
+        provider_block = tts.get(provider)
+        if isinstance(provider_block, dict):
+            tts_cfg[provider] = provider_block
     
     # ---- pexels ----
     pexels_cfg: Dict[str, Any] = {}
@@ -1071,6 +1079,11 @@ class ChatSession:
         self._media_seq_inited = False
         self._media_seq_next = 1
 
+        # Pipeline 自动化
+        self.pipeline_task: Optional[asyncio.Task] = None
+        self.pipeline_confirm_future: Optional[asyncio.Future] = None
+        self.pipeline_cancel_event = asyncio.Event()
+
     def _ensure_system_prompt(self) -> None:
         sys = (get_prompt("instruction.system", lang=self.lang) or "").strip()
         if not sys:
@@ -1474,6 +1487,7 @@ async def lifespan(app: FastAPI):
     app.state.cfg = cfg
     app.state.developer_mode = is_developer_mode(cfg)
     app.state.sessions = SessionStore(cfg)
+    app.state.template_store = TemplateStore()
     yield
 
 
@@ -1600,33 +1614,63 @@ def _build_provider_schema(provider: str, label: str | None, fields: list[dict])
 
 def _build_tts_ui_schema_from_config(config_path: str) -> dict:
     """
-    返回：
-    {
-      "providers": [
-        {"provider":"bytedance","label":"字节跳动","fields":[{"key":"uid",...}, ...]},
-        ...
-      ]
-    }
+    返回 IndexTTS 音色列表，供前端渲染音色选择下拉菜单。
     """
     cfg = _read_config_toml(config_path)
     tts = cfg.get("generate_voiceover", {})
 
-    providers_out: list[dict] = []
+    # 从 config 读取 base_url
+    providers_raw = tts.get("providers") or {}
+    indextts_cfg = providers_raw.get("indextts") or {}
+    base_url = indextts_cfg.get("base_url", "http://39.102.122.9:8049")
 
-    # 格式：[tts.providers.<provider>]
-    providers = tts.get("providers")
-    if isinstance(providers, dict):
-        for provider, provider_cfg in providers.items():
-            fields: list[dict] = []  
-            label = str(provider_cfg.get("label") or provider_cfg.get("name") or provider)
-            for key in provider_cfg.keys():
-                f = _normalize_field_item(str(key))
-                if f:
-                    fields.append(f)
+    # IndexTTS 音色列表（硬编码，来源于 INDEXTTS_API_CLIENT_GUIDE.md）
+    voices = [
+        # ---- 中文女声 ----
+        {"index": "zh_female_intellectual", "label": "知性女声", "group": "中文女声", "default": True},
+        {"index": "zh_female_morning", "label": "亲切早间主播", "group": "中文女声"},
+        {"index": "zh_female_gossip", "label": "活泼八卦风格", "group": "中文女声"},
+        {"index": "zh_female_investigative", "label": "调查记者", "group": "中文女声"},
+        # ---- 中文男声 ----
+        {"index": "zh_male_tech", "label": "科技UP主", "group": "中文男声"},
+        {"index": "zh_male_sports", "label": "体育解说", "group": "中文男声"},
+        {"index": "zh_male_breaking_news", "label": "突发新闻", "group": "中文男声"},
+        {"index": "zh_male_talk_show", "label": "脱口秀", "group": "中文男声"},
+        # ---- English Female ----
+        {"index": "en_female_intellectual", "label": "Professional", "group": "English Female"},
+        {"index": "en_female_morning", "label": "Morning Anchor", "group": "English Female"},
+        {"index": "en_female_gossip", "label": "Gossip", "group": "English Female"},
+        {"index": "en_female_investigative", "label": "Investigative", "group": "English Female"},
+        {"index": "en_female_midnight", "label": "Midnight", "group": "English Female"},
+        {"index": "en_female_midnight_2", "label": "Midnight V2", "group": "English Female"},
+        {"index": "en_female_mature", "label": "Mature", "group": "English Female"},
+        {"index": "en_female_smoky", "label": "Smoky", "group": "English Female"},
+        {"index": "en_female_whisper", "label": "Whisper", "group": "English Female"},
+        # ---- English Male ----
+        {"index": "en_male_tech", "label": "Tech Geek", "group": "English Male"},
+        {"index": "en_male_sports", "label": "Sports", "group": "English Male"},
+        {"index": "en_male_breaking_news", "label": "Breaking News", "group": "English Male"},
+        {"index": "en_male_talk_show", "label": "Talk Show", "group": "English Male"},
+        # ---- 通用 ----
+        {"index": "voice_01", "label": "Voice 01", "group": "通用"},
+        {"index": "voice_02", "label": "Voice 02", "group": "通用"},
+        {"index": "voice_03", "label": "Voice 03", "group": "通用"},
+        {"index": "voice_04", "label": "Voice 04", "group": "通用"},
+        {"index": "voice_05", "label": "Voice 05", "group": "通用"},
+        {"index": "voice_06", "label": "Voice 06", "group": "通用"},
+        {"index": "voice_07", "label": "Voice 07", "group": "通用"},
+        {"index": "voice_08", "label": "Voice 08", "group": "通用"},
+        {"index": "voice_09", "label": "Voice 09", "group": "通用"},
+        {"index": "voice_10", "label": "Voice 10", "group": "通用"},
+        {"index": "voice_11", "label": "Voice 11", "group": "通用"},
+        {"index": "voice_12", "label": "Voice 12", "group": "通用"},
+    ]
 
-            providers_out.append(_build_provider_schema(provider, label, fields))
-
-    return {"providers": providers_out}
+    return {
+        "provider": "indextts",
+        "base_url": base_url,
+        "voices": voices,
+    }
 
 @app.get("/")
 async def index():
@@ -2059,6 +2103,51 @@ async def preview_local_file(session_id: str, path: str):
         headers=headers,
     )
 
+# -------------------------
+# Template CRUD API
+# -------------------------
+
+@api.get("/templates")
+async def list_templates(request: Request):
+    store: TemplateStore = request.app.state.template_store
+    templates = store.list_all()
+    return {"templates": [t.model_dump() for t in templates]}
+
+
+@api.get("/templates/{template_id}")
+async def get_template(request: Request, template_id: str):
+    store: TemplateStore = request.app.state.template_store
+    tpl = store.get(template_id)
+    if not tpl:
+        raise HTTPException(status_code=404, detail="template not found")
+    return tpl.model_dump()
+
+
+@api.post("/templates")
+async def save_template(request: Request):
+    store: TemplateStore = request.app.state.template_store
+    body = await request.json()
+    try:
+        tpl = EditTemplate(**body)
+        tpl.is_preset = False  # 用户不能创建预设
+        saved = store.save(tpl)
+        return saved.model_dump()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@api.delete("/templates/{template_id}")
+async def delete_template(request: Request, template_id: str):
+    store: TemplateStore = request.app.state.template_store
+    try:
+        ok = store.delete(template_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail="template not found")
+        return {"ok": True}
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+
 app.include_router(api)
 
 
@@ -2181,7 +2270,101 @@ async def ws_chat(ws: WebSocket, session_id: str):
                     await ws_send(ws, "chat.cleared", {"ok": True})
                     continue
 
-                if t != "chat.send":
+                # ---- Pipeline: 一键剪辑 ----
+                if t == "pipeline.start":
+                    if sess.pipeline_task and not sess.pipeline_task.done():
+                        await ws_send(ws, "error", {"message": "Pipeline 正在运行中"})
+                        continue
+
+                    data = req.get("data") or {}
+                    template_id = data.get("template_id", "")
+                    template_store: TemplateStore = app.state.template_store
+                    template = template_store.get(template_id)
+                    if not template:
+                        await ws_send(ws, "error", {"message": f"模板不存在: {template_id}"})
+                        continue
+
+                    # 确保 agent 已初始化（我们需要 node_manager 和 store）
+                    try:
+                        await sess.ensure_agent()
+                    except Exception as e:
+                        await ws_send(ws, "error", {"message": f"初始化失败: {e}"})
+                        continue
+
+                    sess.pipeline_cancel_event.clear()
+                    artifact_store = ArtifactStore(
+                        sess.cfg.project.outputs_dir,
+                        session_id=sess.session_id,
+                    )
+
+                    executor = PipelineExecutor(
+                        node_manager=sess.node_manager,
+                        store=artifact_store,
+                        session_id=sess.session_id,
+                        runtime=sess.client_context,
+                    )
+
+                    async def _on_progress(node_id, status, progress, message):
+                        await ws_send(ws, "pipeline.progress", {
+                            "node_id": node_id,
+                            "status": status,
+                            "progress": progress,
+                            "message": message,
+                        })
+
+                    async def _on_confirm(node_id, params, timeout_sec):
+                        await ws_send(ws, "pipeline.confirm", {
+                            "node_id": node_id,
+                            "params": params,
+                            "timeout_sec": timeout_sec,
+                        })
+                        loop = asyncio.get_event_loop()
+                        sess.pipeline_confirm_future = loop.create_future()
+                        try:
+                            result = await sess.pipeline_confirm_future
+                            return result if isinstance(result, dict) else params
+                        finally:
+                            sess.pipeline_confirm_future = None
+
+                    async def _run_pipeline():
+                        try:
+                            result = await executor.run(
+                                template,
+                                on_progress=_on_progress,
+                                on_confirm=_on_confirm if template.auto_mode == "semi_auto" else None,
+                                cancel_event=sess.pipeline_cancel_event,
+                            )
+                            await ws_send(ws, "pipeline.done", result)
+                        except Exception as e:
+                            logger.error(f"[Pipeline] Error: {e}")
+                            await ws_send(ws, "pipeline.error", {
+                                "message": str(e),
+                            })
+
+                    sess.pipeline_task = asyncio.create_task(_run_pipeline())
+                    await ws_send(ws, "pipeline.started", {
+                        "template_id": template_id,
+                        "template_name": template.name,
+                    })
+                    continue
+
+                if t == "pipeline.cancel":
+                    if sess.pipeline_task and not sess.pipeline_task.done():
+                        sess.pipeline_cancel_event.set()
+                        await ws_send(ws, "pipeline.cancelled", {"ok": True})
+                    else:
+                        await ws_send(ws, "error", {"message": "没有正在运行的 Pipeline"})
+                    continue
+
+                if t == "pipeline.confirm_response":
+                    if sess.pipeline_confirm_future and not sess.pipeline_confirm_future.done():
+                        data = req.get("data") or {}
+                        confirmed_params = data.get("params", {})
+                        sess.pipeline_confirm_future.set_result(confirmed_params)
+                        await ws_send(ws, "pipeline.confirm_ack", {"ok": True})
+                    continue
+
+                if t not in ("chat.send",):
                     await ws_send(ws, "error", {"message": f"unknown type: {t}"})
                     continue
 
