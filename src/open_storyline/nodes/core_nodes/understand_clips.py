@@ -140,19 +140,14 @@ class UnderstandClipsNode(BaseNode):
 
             if raw is None:
                 out_item["caption"] = "Error: VLM request failed"
-                try:
-                    raw_score = obj.get("aes_score")
-                    out_item["aes_score"] = float(str(raw_score).strip())
-                except (ValueError, TypeError, AttributeError):
-                    # If the conversion fails (such as "abc", None, "nan", etc.), assign the value -1.0
-                    out_item["aes_score"] = -1.0
+                out_item["aes_score"] = -1.0
                 node_state.node_summary.add_error(repr(last_exc))
                 clip_captions.append(out_item)
                 continue
 
             try:
                 obj = parse_json_dict(raw)
-            except:
+            except Exception:
                 text = (raw or "").strip()
                 out_item["caption"] = text if text else "Error: Unable to parse model output"
                 clip_captions.append(out_item)
@@ -167,7 +162,7 @@ class UnderstandClipsNode(BaseNode):
         desc_lines: list[str] = []
         for desc in clip_captions:
             text = str(desc.get("caption"))
-            desc_lines.append(f"- {desc.get('clip_instance_id')}: {text}")
+            desc_lines.append(f"- {desc.get('clip_id')}: {text}")
 
         overall_summary = ""
         if desc_lines:

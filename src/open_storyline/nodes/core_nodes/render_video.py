@@ -795,7 +795,9 @@ class RenderVideoPipeline:
 
             logger = MCPMoviePyLogger(report)
             
-            FFMPEG_PARAMS[3] = f"{crf}" # set crf (video quality setting), default is 23 (medium quality)
+            # Build local ffmpeg params to avoid mutating the module-level constant
+            # (concurrent renders would corrupt each other's CRF otherwise)
+            ffmpeg_params = ["-preset", "veryfast", "-crf", str(crf), "-threads", "0"]
 
             await asyncio.to_thread(
                 final_clip.write_videofile,
@@ -805,7 +807,7 @@ class RenderVideoPipeline:
                 temp_audiofile=os.path.join(temp_dir, TEMP_AUDIO_FILENAME),
                 remove_temp=True,
                 fps=output_fps,
-                ffmpeg_params=FFMPEG_PARAMS,
+                ffmpeg_params=ffmpeg_params,
                 logger=logger,
             )
 
