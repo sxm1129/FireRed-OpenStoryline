@@ -2082,7 +2082,6 @@ async def preview_local_file(session_id: str, path: str):
     allowed_roots = [
         os.path.abspath(sess.media_dir),
         os.path.abspath(app.state.cfg.project.outputs_dir),
-        os.path.abspath(app.state.cfg.project.outputs_dir),
         os.path.abspath(app.state.cfg.project.bgm_dir),
         os.path.abspath(SERVER_CACHE_DIR),
     ]
@@ -2228,7 +2227,6 @@ async def ws_chat(ws: WebSocket, session_id: str):
         if not sess:
             await ws.close(code=4404, reason="session not found")
             return
-        sess = await store.get_or_404(session_id)
 
         await ws_send(ws, "session.snapshot", sess.snapshot())
 
@@ -2259,7 +2257,6 @@ async def ws_chat(ws: WebSocket, session_id: str):
                 if t == "chat.clear":
                     async with sess.chat_lock:
                         sess.sent_media_total = 0
-                        sess._attach_stats_msg_idx = 1
                         sess.lc_messages = [
                             SystemMessage(content=get_prompt("instruction.system", lang=sess.lang)),
                             SystemMessage(content="【User media upload status】{}"),

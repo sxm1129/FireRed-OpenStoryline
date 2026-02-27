@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, List, Optional, Tuple
 import json
 import time
+import uuid
 
 from open_storyline.storage.file import FileCompressor
 from open_storyline.utils.logging import get_logger
@@ -131,7 +132,7 @@ class ArtifactStore:
         return meta, data
     
     def generate_artifact_id(self, node_id):
-        unique_id = time.time()
+        unique_id = uuid.uuid4().hex[:8]
         artifact_id = f"{node_id}_{unique_id}"
         return artifact_id
 

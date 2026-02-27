@@ -3,6 +3,7 @@ from dataclasses import asdict
 from typing import Annotated
 from pydantic import BaseModel, Field
 import inspect
+import time
 import traceback
 
 from open_storyline.config import Settings
@@ -130,6 +131,7 @@ def register(server: FastMCP, cfg: Settings) -> None:
         params['session_id'] = session_id
         params['node_summary'] = node_summary
     
+        store = None
         try:
             store = ArtifactStore(artifacts_dir=params.get('artifacts_dir', ".storyline/.server_cache"), session_id=session_id)
             meta, data = store.load_result(params['query_artifact_id'])
@@ -137,11 +139,12 @@ def register(server: FastMCP, cfg: Settings) -> None:
             isError = False
         except Exception as e:
             traceback_info = ''.join(traceback.format_exception(e))
-            summary = f"History read execution failed: {params['query_artifact_id']}\n {traceback_info}",
+            summary = f"History read execution failed: {params['query_artifact_id']}\n {traceback_info}"
             meta, data, isError = 'None', 'None', True
 
+        fallback_id = store.generate_artifact_id(req_json_content['params'].get('name', 'read_node_history')) if store else f"read_node_history_{time.time()}"
         return {
-            'artifact_id': params.get('artifact_id', store.generate_artifact_id(req_json_content['params'].get('name', 'read_node_history'))),
+            'artifact_id': params.get('artifact_id', fallback_id),
             'tool_excute_result': {
                 "history": {
                     "meta": meta,

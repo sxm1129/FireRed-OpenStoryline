@@ -125,6 +125,12 @@ class ToolInterceptor:
 
                         if not missing_kinds:
                             return
+                        if depth > 10:
+                            raise ToolException(
+                                f"Dependency recursion too deep (depth={depth}) "
+                                f"while resolving {missing_kinds} for `{for_node_id}`. "
+                                f"Check for circular dependencies."
+                            )
                         
                         indent = "  " * depth
                         logger.info(f"{indent}├─ Resolving dependencies for `{for_node_id}`: {missing_kinds}")
@@ -188,7 +194,6 @@ class ToolInterceptor:
                         default_collect_result = meta_collector.check_excutable(
                             session_id, store, default_require
                         )
-                        default_collect_result = meta_collector.check_excutable(session_id, store, default_require)
                         
                         # Recursively process dependencies
                         if default_collect_result['excutable']:
@@ -313,7 +318,7 @@ class ToolInterceptor:
     async def inject_tts_config(request: MCPToolCallRequest, handler):
         """
         Interceptor: Injects runtime.context.tts_config parameters into request.args before invoking voiceover/TTS tools.
-        - tts_config: {"provider": "bytedance", "bytedance": {...}, "azure": {...}, ...}
+        - tts_config: {"provider": "indextts", "voice_index": "zh_female_intellectual", ...}
         """
         try:
             tool_name = str(getattr(request, "name", "") or "")
@@ -328,23 +333,23 @@ class ToolInterceptor:
             if not isinstance(tts_cfg, dict):
                 return await handler(request)
 
-            provider = str(tts_cfg.get("provider") or "").strip().lower()
-
-            if not provider:
-                args.setdefault("provider", "302")
-                return await handler(request)
-
+            provider = str(tts_cfg.get("provider") or "indextts").strip().lower()
             args.setdefault("provider", provider)
 
+            # Inject voice_index for IndexTTS
+            voice_index = str(tts_cfg.get("voice_index") or "").strip()
+            if voice_index:
+                args.setdefault("voice_index", voice_index)
+
+            # Inject provider sub-block fields (e.g. base_url)
             provider_cfg = tts_cfg.get(provider)
             if isinstance(provider_cfg, dict):
                 for key, value in provider_cfg.items():
-                    if value is None:                        
+                    if value is None:
                         continue
                     args.setdefault(key, str(value).strip())
         except Exception as e:
-            print(f"{e}")
-            pass
+            logger.warning(f"[inject_tts_config] {e}")
         return await handler(request)
     
     @staticmethod
@@ -374,6 +379,5 @@ class ToolInterceptor:
             args["pexels_api_key"] = key
 
         except Exception as e:
-            print(f"{e}")
-            pass
+            logger.warning(f"[inject_pexels_api_key] {e}")
         return await handler(request)
