@@ -3419,7 +3419,7 @@ class App {
       const nodeCount = (t.nodes || []).filter(n => n.mode !== "skip").length;
       return `
         <div class="pipeline-template-card ${t.is_preset ? 'is-preset' : ''}"
-             data-template-id="${t.template_id}">
+             data-template-id="${this._escHtml(t.template_id)}">
           <div class="pipeline-template-card-name">${this._escHtml(t.name)}</div>
           <div class="pipeline-template-card-desc">${this._escHtml(t.description)}</div>
           <div class="pipeline-template-card-meta">
@@ -3463,6 +3463,10 @@ class App {
   _insertPipelineProgress(data) {
     const chat = $("#chat");
     if (!chat) return;
+
+    // RISK-2 fix: remove old progress panel if exists
+    const oldPanel = document.getElementById("pipelineProgressPanel");
+    if (oldPanel) oldPanel.remove();
 
     const el = document.createElement("div");
     el.className = "pipeline-progress";
@@ -3585,6 +3589,13 @@ class App {
       if (remaining <= 0) {
         clearInterval(this._pipelineConfirmTimer);
         this._pipelineConfirmTimer = null;
+        // BUG-1 fix: notify backend with default params on timeout
+        if (this.ws) {
+          this.ws.send("pipeline.confirm_response", {
+            node_id: this._pipelineConfirmNodeId,
+            params: params || {},
+          });
+        }
         this._closePipelineConfirm();
       }
     }, 1000);

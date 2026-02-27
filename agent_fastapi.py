@@ -2304,8 +2304,15 @@ async def ws_chat(ws: WebSocket, session_id: str):
                         runtime=sess.client_context,
                     )
 
+                    async def _safe_ws_send(event_type, payload):
+                        """ws_send wrapper: Pipeline Task 可能在 WS 断开后仍在运行"""
+                        try:
+                            await ws_send(ws, event_type, payload)
+                        except Exception:
+                            logger.debug(f"[Pipeline] ws_send({event_type}) failed (WS likely closed)")
+
                     async def _on_progress(node_id, status, progress, message):
-                        await ws_send(ws, "pipeline.progress", {
+                        await _safe_ws_send("pipeline.progress", {
                             "node_id": node_id,
                             "status": status,
                             "progress": progress,
@@ -2313,7 +2320,7 @@ async def ws_chat(ws: WebSocket, session_id: str):
                         })
 
                     async def _on_confirm(node_id, params, timeout_sec):
-                        await ws_send(ws, "pipeline.confirm", {
+                        await _safe_ws_send("pipeline.confirm", {
                             "node_id": node_id,
                             "params": params,
                             "timeout_sec": timeout_sec,
@@ -2334,10 +2341,10 @@ async def ws_chat(ws: WebSocket, session_id: str):
                                 on_confirm=_on_confirm if template.auto_mode == "semi_auto" else None,
                                 cancel_event=sess.pipeline_cancel_event,
                             )
-                            await ws_send(ws, "pipeline.done", result)
+                            await _safe_ws_send("pipeline.done", result)
                         except Exception as e:
                             logger.error(f"[Pipeline] Error: {e}")
-                            await ws_send(ws, "pipeline.error", {
+                            await _safe_ws_send("pipeline.error", {
                                 "message": str(e),
                             })
 
@@ -2360,7 +2367,10 @@ async def ws_chat(ws: WebSocket, session_id: str):
                     if sess.pipeline_confirm_future and not sess.pipeline_confirm_future.done():
                         data = req.get("data") or {}
                         confirmed_params = data.get("params", {})
-                        sess.pipeline_confirm_future.set_result(confirmed_params)
+                        try:
+                            sess.pipeline_confirm_future.set_result(confirmed_params)
+                        except asyncio.InvalidStateError:
+                            logger.debug("[Pipeline] confirm_response arrived after timeout, ignoring")
                         await ws_send(ws, "pipeline.confirm_ack", {"ok": True})
                     continue
 
