@@ -12,6 +12,7 @@ import uuid
 import math
 import logging
 import shutil
+import requests as _requests
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple, Set
@@ -152,6 +153,107 @@ def _resolve_default_model_override(cfg: Settings, model_name: str) -> Tuple[Opt
         )
 
     return override, None
+
+
+# ---------------------------------------------------------------------------
+# Dynamic model discovery via OpenAI-compatible /v1/models API
+# ---------------------------------------------------------------------------
+
+_VLM_KEYWORDS = {"vl", "vision", "ocr"}
+_EXCLUDE_KEYWORDS = {"embedding", "embed", "asr", "audio", "rerank", "mt-", "paraformer"}
+
+def _classify_model(model_id: str) -> str:
+    m = model_id.lower()
+    if any(kw in m for kw in _EXCLUDE_KEYWORDS):
+        return "skip"
+    if any(kw in m for kw in _VLM_KEYWORDS):
+        return "vlm"
+    return "llm"
+
+def _fetch_provider_models(
+    cfg: Settings,
+) -> Tuple[List[str], List[str]]:
+    """
+    Fetch available models from the configured provider's /v1/models endpoint.
+    Returns (llm_models, vlm_models) sorted alphabetically.
+    Falls back to config defaults on any failure.
+    """
+    default_llm = _s(getattr(getattr(cfg, "developer", None), "default_llm", "")) or "deepseek-chat"
+    default_vlm = _s(getattr(getattr(cfg, "developer", None), "default_vlm", "")) or "qwen3-vl-8b-instruct"
+    fallback = ([default_llm], [default_vlm])
+
+    # Get base_url and api_key from [llm] section (primary provider)
+    llm_section = getattr(cfg, "llm", None)
+    base_url = _norm_url(getattr(llm_section, "base_url", "") if llm_section else "")
+    api_key = _s(getattr(llm_section, "api_key", "") if llm_section else "")
+
+    if not base_url or not api_key:
+        logger.warning("[ModelDiscovery] No base_url/api_key in [llm] config, skipping model fetch")
+        return fallback
+
+    # Build models endpoint: /compatible-mode/v1 → /compatible-mode/v1/models
+    models_url = base_url.rstrip("/") + "/models"
+
+    try:
+        logger.info(f"[ModelDiscovery] Fetching models from {models_url} ...")
+        resp = _requests.get(
+            models_url,
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=8,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        logger.warning(f"[ModelDiscovery] Failed to fetch models: {e}. Using config defaults.")
+        return fallback
+
+    # Parse OpenAI-compatible response: {"data": [{"id": "model-name", ...}, ...]}
+    models_data = data.get("data") or []
+    if not isinstance(models_data, list):
+        logger.warning(f"[ModelDiscovery] Unexpected response format. Using config defaults.")
+        return fallback
+
+    llm_set: set[str] = set()
+    vlm_set: set[str] = set()
+
+    for item in models_data:
+        model_id = item.get("id") if isinstance(item, dict) else None
+        if not model_id or not isinstance(model_id, str):
+            continue
+        cat = _classify_model(model_id)
+        if cat == "llm":
+            llm_set.add(model_id)
+        elif cat == "vlm":
+            vlm_set.add(model_id)
+
+    # Merge with config.toml chat_models_config entries
+    chat_models_cfg = {}
+    try:
+        chat_models_cfg = getattr(getattr(cfg, "developer", None), "chat_models_config", None) or {}
+    except Exception:
+        pass
+    for model_name in chat_models_cfg:
+        if model_name and isinstance(model_name, str) and _classify_model(model_name) != "skip":
+            cat = _classify_model(model_name)
+            if cat == "vlm":
+                vlm_set.add(model_name)
+            else:
+                llm_set.add(model_name)
+
+    # Ensure defaults are present
+    llm_set.add(default_llm)
+    vlm_set.add(default_vlm)
+
+    # Sort with default first
+    def _sort_with_default_first(models: set[str], default: str) -> list[str]:
+        others = sorted(m for m in models if m != default)
+        return [default] + others
+
+    llm_list = _sort_with_default_first(llm_set, default_llm)
+    vlm_list = _sort_with_default_first(vlm_set, default_vlm)
+
+    logger.info(f"[ModelDiscovery] Found {len(llm_list)} LLM models, {len(vlm_list)} VLM models")
+    return llm_list, vlm_list
 
 def _stable_dict_key(d: Optional[Dict[str, Any]]) -> str:
     try:
@@ -1018,7 +1120,7 @@ class ChatSession:
     - load_media / pending_media（staging）
     - tool trace 索引（支持 tool 事件“就地更新”）
     """
-    def __init__(self, session_id: str, cfg: Settings):
+    def __init__(self, session_id: str, cfg: Settings, *, available_llm_models: Optional[List[str]] = None, available_vlm_models: Optional[List[str]] = None):
         self.session_id = session_id
         self.cfg = cfg
         self.lang = "zh"
@@ -1026,10 +1128,14 @@ class ChatSession:
         default_llm = _s(getattr(getattr(cfg, "developer", None), "default_llm", "")) or "deepseek-chat"
         default_vlm = _s(getattr(getattr(cfg, "developer", None), "default_vlm", "")) or "qwen3-vl-8b-instruct"
 
-        self.chat_models = [default_llm, CUSTOM_MODEL_KEY]
+        # Use dynamically discovered models if available, otherwise fallback
+        avail_llm = available_llm_models if available_llm_models else [default_llm]
+        avail_vlm = available_vlm_models if available_vlm_models else [default_vlm]
+
+        self.chat_models = avail_llm + [CUSTOM_MODEL_KEY]
         self.chat_model_key = default_llm
 
-        self.vlm_models = [default_vlm, CUSTOM_MODEL_KEY]
+        self.vlm_models = avail_vlm + [CUSTOM_MODEL_KEY]
         self.vlm_model_key = default_vlm
 
         self.developer_mode = is_developer_mode(cfg)
@@ -1458,14 +1564,16 @@ class ChatSession:
 
 
 class SessionStore:
-    def __init__(self, cfg: Settings):
+    def __init__(self, cfg: Settings, *, available_llm_models: Optional[List[str]] = None, available_vlm_models: Optional[List[str]] = None):
         self.cfg = cfg
         self._lock = asyncio.Lock()
         self._sessions: Dict[str, ChatSession] = {}
+        self._available_llm_models = available_llm_models or []
+        self._available_vlm_models = available_vlm_models or []
 
     async def create(self) -> ChatSession:
         sid = uuid.uuid4().hex
-        sess = ChatSession(sid, self.cfg)
+        sess = ChatSession(sid, self.cfg, available_llm_models=self._available_llm_models, available_vlm_models=self._available_vlm_models)
         async with self._lock:
             self._sessions[sid] = sess
         return sess
@@ -1486,7 +1594,13 @@ async def lifespan(app: FastAPI):
     cfg = load_settings(default_config_path())
     app.state.cfg = cfg
     app.state.developer_mode = is_developer_mode(cfg)
-    app.state.sessions = SessionStore(cfg)
+
+    # Discover available models from provider API
+    llm_models, vlm_models = await asyncio.to_thread(_fetch_provider_models, cfg)
+    app.state.available_llm_models = llm_models
+    app.state.available_vlm_models = vlm_models
+
+    app.state.sessions = SessionStore(cfg, available_llm_models=llm_models, available_vlm_models=vlm_models)
     app.state.template_store = TemplateStore()
     yield
 
